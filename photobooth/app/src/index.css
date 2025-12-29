@@ -1,4 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700;900&display=swap');
 @import "tailwindcss"; 
+
+:root {
+  font-family: 'Outfit', sans-serif;
+}
 
 button {
   cursor: pointer;
