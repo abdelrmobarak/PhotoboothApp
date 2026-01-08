@@ -31,7 +31,6 @@ export default function Photostrip({ photos, selectedBorder, stickers, setSticke
             return null;
         }
         var newImg = new Image();
-        newImg.crossOrigin = "anonymous"; // needed for cors stuff
         newImg.src = src;
         imageCache.current.set(src, newImg);
         newImg.onload = function () {
@@ -215,7 +214,11 @@ export default function Photostrip({ photos, selectedBorder, stickers, setSticke
         ctx.fillText('PHOTOBOOTH', stripWidth / 2, totalH - 20);
 
         if (canvasRef.current) {
-            setStripUrl(canvasRef.current.toDataURL("image/png"));
+            try {
+                setStripUrl(canvasRef.current.toDataURL("image/png"));
+            } catch (err) {
+                setStripUrl(null);
+            }
         }
     }, [photos, selectedBorder, stickers, version, selectedId, editingId]);
 

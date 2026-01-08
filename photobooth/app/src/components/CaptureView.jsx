@@ -1,4 +1,4 @@
-import Webcam from "react-webcam";
+import Webcam from 'react-webcam'
 
 // main capture screen
 export default function CaptureView({ webcamRef, capture, photoCount, countdown }) {
@@ -12,16 +12,14 @@ export default function CaptureView({ webcamRef, capture, photoCount, countdown 
 
     return (
         <div className="flex flex-col items-center gap-8">
-            <h1 className='text-6xl font-black text-neutral-800'>Photobooth</h1>
+            <div className='text-6xl font-black text-neutral-800'>Photobooth</div>
             <div className="relative rounded-3xl overflow-hidden border-8 border-white shadow-2xl bg-black">
                 <Webcam
                     ref={webcamRef}
                     mirrored={true}
-                    constraints={{
-                        width: { ideal: 4096},
-                        height: { ideal: 2160},
-                        facingMode: "user"
-                    }}
+                    audio={false}
+                    screenshotFormat="image/png"
+                    videoConstraints={{ facingMode: 'user' }}
                     className="w-full max-w-[85vw] aspect-video object-cover"
                 />
             </div>

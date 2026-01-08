@@ -248,6 +248,37 @@ export default function ResultView({ photos, selectedBorder, BORDERS, switchBord
         setEditingId(null);
     }
 
+    function handleSave() {
+        if (!stripUrl) return;
+        var link = document.createElement('a');
+        link.download = 'photostrip.png';
+        if (stripUrl.indexOf('data:') == 0) {
+            var parts = stripUrl.split(',');
+            var meta = parts[0] || '';
+            var b64 = parts[1] || '';
+            var match = meta.match(/:(.*?);/);
+            var mime = match ? match[1] : 'image/png';
+            var byteString = atob(b64);
+            var len = byteString.length;
+            var bytes = new Uint8Array(len);
+            for (var i = 0; i < len; i++) {
+                bytes[i] = byteString.charCodeAt(i);
+            }
+            var blob = new Blob([bytes], { type: mime });
+            var url = URL.createObjectURL(blob);
+            link.href = url;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        } else {
+            link.href = stripUrl;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        }
+    }
+
     // border buttons logic
     var borderButtons = [];
     for (let i = 0; i < BORDERS.length; i++) {
@@ -463,11 +494,13 @@ export default function ResultView({ photos, selectedBorder, BORDERS, switchBord
                 </div>
 
                 <div className="flex flex-col gap-3">
-                    <a href={stripUrl} download="photostrip.png" className="w-full">
-                        <button className="w-full bg-black text-white py-5 rounded-2xl font-black text-xl">
-                            SAVE STRIP
-                        </button>
-                    </a>
+                    <button
+                        onClick={handleSave}
+                        disabled={!stripUrl}
+                        className="w-full bg-black text-white py-5 rounded-2xl font-black text-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        SAVE STRIP
+                    </button>
                     <button
                         onClick={clearPhoto}
                         className="w-full bg-gray-300 text-neutral-500 py-4 rounded-2xl font-black text-sm"

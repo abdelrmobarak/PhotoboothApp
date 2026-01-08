@@ -3,11 +3,11 @@ export default function StickerToolbar({ onAddSticker, onAddText }) {
 
     // local svg props in the public folder
     var stickerList = [
-        { id: 'heart', url: '/heart.svg', name: 'Heart' },
-        { id: 'sunglasses', url: '/sunglasses.svg', name: 'Sunglasses' },
-        { id: 'moustache', url: '/moustache.png', name: 'Moustache' },
-        { id: 'kiss', url: '/kiss.png', name: 'Kiss' },
-        { id: 'pirate', url: '/pirate-hat.png', name: 'Pirate Hat' },
+        { id: 'heart', url: 'heart.svg', name: 'Heart' },
+        { id: 'sunglasses', url: 'sunglasses.svg', name: 'Sunglasses' },
+        { id: 'moustache', url: 'moustache.png', name: 'Moustache' },
+        { id: 'kiss', url: 'kiss.png', name: 'Kiss' },
+        { id: 'pirate', url: 'pirate-hat.png', name: 'Pirate Hat' },
     ];
 
     function handleDragStart(e, url) {
