@@ -3,7 +3,7 @@ import Photostrip from './Photostrip';
 import StickerToolbar from './StickerToolbar';
 
 // result page with grid editing and photostrip
-export default function ResultView({ photos, selectedBorder, BORDERS, switchBorder, stripUrl, setStripUrl, clearPhoto, stickers, setStickers }) {
+export default function ResultView({ photos, selectedBorder, BORDERS, switchBorder, stripUrl, setStripUrl, stripMime, setStripMime, clearPhoto, stickers, setStickers }) {
     // some refs for dragging on the grid
     var gridDragId = useRef(null);
     var gridDragIdx = useRef(null);
@@ -26,8 +26,48 @@ export default function ResultView({ photos, selectedBorder, BORDERS, switchBord
     var [tempText, setTempText] = useState('');
     var [tempColor, setTempColor] = useState('#000000');
     var [tempFont, setTempFont] = useState('Arial');
+    var [gifFrame, setGifFrame] = useState(0);
+    var gifTimer = useRef(null);
 
     var FONTS = ['Arial', 'Georgia', 'Courier New'];
+
+    var isGifMode = false;
+    for (var g = 0; g < photos.length; g++) {
+        if (photos[g] && photos[g].frames && photos[g].frames.length > 1) {
+            isGifMode = true;
+            break;
+        }
+    }
+
+    function getPhotoFrameSrc(photo, frameIdx) {
+        if (!photo) return null;
+        if (typeof photo == 'string') return photo;
+        if (photo.frames && photo.frames.length > 0) {
+            var idx = frameIdx % photo.frames.length;
+            return photo.frames[idx];
+        }
+        return photo.still || null;
+    }
+
+    useEffect(function () {
+        if (gifTimer.current) {
+            clearInterval(gifTimer.current);
+            gifTimer.current = null;
+        }
+
+        if (isGifMode) {
+            gifTimer.current = setInterval(function () {
+                setGifFrame(function (prev) { return prev + 1; });
+            }, 140);
+        }
+
+        return function () {
+            if (gifTimer.current) {
+                clearInterval(gifTimer.current);
+                gifTimer.current = null;
+            }
+        };
+    }, [isGifMode]);
 
     // constants to match Photostrip
     var stripW = 300;
@@ -251,7 +291,8 @@ export default function ResultView({ photos, selectedBorder, BORDERS, switchBord
     function handleSave() {
         if (!stripUrl) return;
         var link = document.createElement('a');
-        link.download = 'photostrip.png';
+        var isGif = stripMime == 'image/gif';
+        link.download = isGif ? 'photostrip.gif' : 'photostrip.png';
         if (stripUrl.indexOf('data:') == 0) {
             var parts = stripUrl.split(',');
             var meta = parts[0] || '';
@@ -306,7 +347,7 @@ export default function ResultView({ photos, selectedBorder, BORDERS, switchBord
     }
     var gridCells = [];
     for (let k = 0; k < 4; k++) {
-        var photoSrc = photos[k];
+        var photoSrc = getPhotoFrameSrc(photos[k], gifFrame);
         var itemsInThisCell = [];
 
         // check each sticker to see if it lives in this photo's vertical slice
@@ -402,14 +443,14 @@ export default function ResultView({ photos, selectedBorder, BORDERS, switchBord
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => handleDropOnPhoto(e, k)}
                 onMouseDown={() => setSelectedId(null)}
-                className="relative bg-black rounded-lg overflow-hidden border-2 border-neutral-300 shadow flex items-center justify-center select-none aspect-[270/220] [container-type:size]"
+                className="relative bg-black rounded-lg border-2 border-neutral-300 shadow flex items-center justify-center select-none aspect-[270/220] [container-type:size]"
             >
                 {photoSrc ? (
                     <img src={photoSrc} className="w-full h-full object-cover pointer-events-none" />
                 ) : (
                     <span className="text-neutral-500 font-bold italic text-xs uppercase">Photo {k + 1}</span>
                 )}
-                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute inset-0 pointer-events-none">
                     {itemsInThisCell}
                 </div>
             </div>
@@ -417,7 +458,7 @@ export default function ResultView({ photos, selectedBorder, BORDERS, switchBord
     }
 
     return (
-        <div className='flex flex-col lg:flex-row items-center justify-center gap-12 w-full max-w-[95vw] lg:max-w-none min-h-screen lg:fixed lg:inset-0 lg:h-screen lg:w-screen lg:overflow-hidden p-4 lg:p-0 origin-center'>
+        <div className='flex flex-col lg:flex-row items-center justify-center gap-12 w-full max-w-[95vw] lg:max-w-none min-h-screen lg:fixed lg:inset-0 lg:h-screen lg:w-screen p-4 lg:p-0 origin-center'>
             <div className="w-full lg:flex-1 max-w-xl order-2 lg:order-1">
                 <h2 className="text-2xl font-black text-neutral-800 mb-6 uppercase">1. Decorate Photos</h2>
                 <div className="grid grid-cols-2 gap-4 p-4 rounded-3xl border-2 border-dashed border-neutral-300">
@@ -471,13 +512,28 @@ export default function ResultView({ photos, selectedBorder, BORDERS, switchBord
             <div className="flex flex-col items-center order-3 lg:order-2">
                 <span className="text-md uppercase font-black text-neutral-400 mb-4">Strip View</span>
                 <div>
-                    <Photostrip
-                        photos={photos}
-                        selectedBorder={selectedBorder}
-                        stickers={stickers}
-                        setStickers={setStickers}
-                        setStripUrl={setStripUrl}
-                    />
+                    <div className={stripMime == 'image/gif' ? 'hidden' : 'block'}>
+                        <Photostrip
+                            photos={photos}
+                            selectedBorder={selectedBorder}
+                            stickers={stickers}
+                            setStickers={setStickers}
+                            setStripUrl={setStripUrl}
+                            setStripMime={setStripMime}
+                        />
+                    </div>
+                    {stripMime == 'image/gif' && stripUrl && (
+                        <img
+                            src={stripUrl}
+                            alt="Animated photostrip preview"
+                            className="border border-neutral-200 shadow-2xl max-h-[80vh] w-auto object-contain rounded-md"
+                        />
+                    )}
+                    {stripMime == 'image/gif' && !stripUrl && (
+                        <div className="border border-dashed border-neutral-300 rounded-md px-6 py-8 text-sm font-bold text-neutral-400">
+                            Rendering GIF...
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -499,7 +555,7 @@ export default function ResultView({ photos, selectedBorder, BORDERS, switchBord
                         disabled={!stripUrl}
                         className="w-full bg-black text-white py-5 rounded-2xl font-black text-xl disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        SAVE STRIP
+                        {stripMime == 'image/gif' ? 'SAVE GIF' : 'SAVE STRIP'}
                     </button>
                     <button
                         onClick={clearPhoto}

@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
+import GIF from 'gif.js.optimized';
+
+const GIF_WORKER_URL = new URL('gif.js.optimized/dist/gif.worker.js', import.meta.url).toString();
+const GIF_FPS = 8;
 
 // photostrip view used for rotating stickers and moving them around
-export default function Photostrip({ photos, selectedBorder, stickers, setStickers, setStripUrl }) {
+export default function Photostrip({ photos, selectedBorder, stickers, setStickers, setStripUrl, setStripMime }) {
     const canvasRef = useRef(null);
     const imageCache = useRef(new Map());
     const [version, setVersion] = useState(0);
+    const gifBuildTimer = useRef(null);
+    const gifBuildId = useRef(0);
 
     // all the drag states for stickers
     var isDragging = useRef(false);
@@ -42,6 +48,23 @@ export default function Photostrip({ photos, selectedBorder, stickers, setSticke
         return null;
     }
 
+    function getStillSrc(photo) {
+        if (photo == null) return null;
+        if (typeof photo == 'string') return photo;
+        return photo.still || null;
+    }
+
+    function getFrameSrc(photo, idx) {
+        if (photo == null) return null;
+        if (typeof photo == 'string') return photo;
+        if (photo.frames && photo.frames.length > 0) {
+            var safeIdx = idx;
+            if (safeIdx >= photo.frames.length) safeIdx = photo.frames.length - 1;
+            return photo.frames[safeIdx];
+        }
+        return photo.still || null;
+    }
+
     // draws image with cover fit like css object-fit
     function coverDraw(ctx, img, x, y, w, h) {
         var imgRatio = img.width / img.height;
@@ -76,7 +99,8 @@ export default function Photostrip({ photos, selectedBorder, stickers, setSticke
         // get all the photos that are not null
         var activePhotos = [];
         for (var i = 0; i < photos.length; i++) {
-            if (photos[i]) activePhotos.push(photos[i]);
+            var still = getStillSrc(photos[i]);
+            if (still) activePhotos.push(still);
         }
 
         var totalH = pad + activePhotos.length * (photoH + gap) + footerH;
@@ -213,14 +237,182 @@ export default function Photostrip({ photos, selectedBorder, stickers, setSticke
         ctx.textAlign = 'center';
         ctx.fillText('PHOTOBOOTH', stripWidth / 2, totalH - 20);
 
-        if (canvasRef.current) {
+        var hasGifFrames = false;
+        for (var p = 0; p < photos.length; p++) {
+            if (photos[p] && photos[p].frames && photos[p].frames.length > 1) {
+                hasGifFrames = true;
+                break;
+            }
+        }
+
+        if (!hasGifFrames && canvasRef.current) {
             try {
                 setStripUrl(canvasRef.current.toDataURL("image/png"));
+                if (setStripMime) setStripMime('image/png');
             } catch (err) {
                 setStripUrl(null);
             }
         }
     }, [photos, selectedBorder, stickers, version, selectedId, editingId]);
+
+    useEffect(function () {
+        var hasGifFrames = false;
+        for (var i = 0; i < photos.length; i++) {
+            if (photos[i] && photos[i].frames && photos[i].frames.length > 1) {
+                hasGifFrames = true;
+                break;
+            }
+        }
+        if (!hasGifFrames) return;
+
+        if (gifBuildTimer.current) {
+            clearTimeout(gifBuildTimer.current);
+        }
+
+        var buildId = gifBuildId.current + 1;
+        gifBuildId.current = buildId;
+
+        gifBuildTimer.current = setTimeout(function () {
+            if (gifBuildId.current != buildId) return;
+
+            var stripWidth = 300;
+            var pad = 15;
+            var photoW = stripWidth - pad * 2;
+            var photoH = 220;
+            var gap = 15;
+            var footerH = 100;
+
+            var activePhotos = [];
+            for (var p = 0; p < photos.length; p++) {
+                if (photos[p]) activePhotos.push(photos[p]);
+            }
+
+            var frameCount = 1;
+            for (var f = 0; f < activePhotos.length; f++) {
+                var frames = activePhotos[f].frames || [];
+                if (frames.length > frameCount) frameCount = frames.length;
+            }
+
+            var totalH = pad + activePhotos.length * (photoH + gap) + footerH;
+            var frameCanvas = document.createElement('canvas');
+            frameCanvas.width = stripWidth;
+            frameCanvas.height = totalH;
+            var frameCtx = frameCanvas.getContext('2d');
+
+            var allReady = true;
+            for (var a = 0; a < activePhotos.length; a++) {
+                var framesArr = activePhotos[a].frames || [];
+                for (var b = 0; b < framesArr.length; b++) {
+                    if (!loadImage(framesArr[b])) allReady = false;
+                }
+            }
+            for (var s = 0; s < stickers.length; s++) {
+                if (stickers[s].type == 'image' && !loadImage(stickers[s].url)) {
+                    allReady = false;
+                }
+            }
+            if (!loadImage('/logo.png')) {
+            }
+
+            if (!allReady) return;
+
+            function drawFrame(frameIdx) {
+                frameCtx.clearRect(0, 0, stripWidth, totalH);
+                frameCtx.fillStyle = selectedBorder.color;
+                frameCtx.fillRect(0, 0, stripWidth, totalH);
+
+                for (var idx = 0; idx < activePhotos.length; idx++) {
+                    var yPos = pad + idx * (photoH + gap);
+                    frameCtx.fillStyle = selectedBorder.borderColor || '#eee';
+                    frameCtx.fillRect(pad - 2, yPos - 2, photoW + 4, photoH + 4);
+
+                    var frameSrc = getFrameSrc(activePhotos[idx], frameIdx);
+                    var frameImg = loadImage(frameSrc);
+                    if (frameImg) {
+                        coverDraw(frameCtx, frameImg, pad, yPos, photoW, photoH);
+                    }
+                }
+
+                for (var j = 0; j < stickers.length; j++) {
+                    var stk = stickers[j];
+                    if (stk.type == 'text') {
+                        frameCtx.save();
+                        frameCtx.translate(stk.x, stk.y);
+                        if (stk.rotation) {
+                            frameCtx.rotate(stk.rotation);
+                        }
+                        frameCtx.font = 'bold ' + stk.size + 'px ' + (stk.font || 'Arial');
+                        frameCtx.fillStyle = stk.color || '#000000';
+                        frameCtx.textAlign = 'center';
+                        frameCtx.textBaseline = 'middle';
+                        frameCtx.fillText(stk.text, 0, 0);
+                        frameCtx.restore();
+                    } else {
+                        var imgToDraw = loadImage(stk.url);
+                        if (imgToDraw) {
+                            frameCtx.save();
+                            frameCtx.translate(stk.x, stk.y);
+                            if (stk.rotation) {
+                                frameCtx.rotate(stk.rotation);
+                            }
+
+                            var naturalW = imgToDraw.width;
+                            var naturalH = imgToDraw.height;
+                            var artRatio = naturalW / naturalH;
+                            var finalW = stk.size;
+                            var finalH = stk.size / artRatio;
+                            frameCtx.drawImage(imgToDraw, -finalW / 2, -finalH / 2, finalW, finalH);
+                            frameCtx.restore();
+                        }
+                    }
+                }
+
+                var logoImg = loadImage('/logo.png');
+                if (logoImg) {
+                    var logoSz = 60;
+                    var logoX = (stripWidth - logoSz) / 2;
+                    var logoY = totalH - footerH + (footerH - logoSz) / 2 - 10;
+                    frameCtx.drawImage(logoImg, logoX, logoY, logoSz, logoSz);
+                }
+
+                frameCtx.fillStyle = selectedBorder.textColor;
+                frameCtx.font = 'bold 24px Arial';
+                frameCtx.textAlign = 'center';
+                frameCtx.fillText('PHOTOBOOTH', stripWidth / 2, totalH - 20);
+            }
+
+            var gif = new GIF({
+                workers: 2,
+                quality: 10,
+                workerScript: GIF_WORKER_URL
+            });
+
+            var delay = Math.round(1000 / GIF_FPS);
+            for (var fi = 0; fi < frameCount; fi++) {
+                drawFrame(fi);
+                gif.addFrame(frameCanvas, { copy: true, delay: delay });
+            }
+
+            gif.on('finished', function (blob) {
+                if (gifBuildId.current != buildId) return;
+                var reader = new FileReader();
+                reader.onloadend = function () {
+                    if (gifBuildId.current != buildId) return;
+                    setStripUrl(reader.result);
+                    if (setStripMime) setStripMime('image/gif');
+                };
+                reader.readAsDataURL(blob);
+            });
+
+            gif.render();
+        }, 400);
+
+        return function () {
+            if (gifBuildTimer.current) {
+                clearTimeout(gifBuildTimer.current);
+            }
+        };
+    }, [photos, selectedBorder, stickers, version]);
 
     function getCanvasCoords(e) {
         var box = canvasRef.current.getBoundingClientRect();

@@ -2,6 +2,9 @@ import { useState, useRef } from 'react'
 import CaptureView from './components/CaptureView';
 import ResultView from './components/ResultView';
 
+var CAPTURE_DURATION_MS = 1000;
+var CAPTURE_FPS = 8;
+
 // border options for the photostrip
 var BORDERS = [
   { id: 0, name: 'White', color: '#ffffff', textColor: '#000000', borderColor: '#eeeeee' },
@@ -14,22 +17,22 @@ function App() {
   var webcamRef = useRef(null);
 
   // storing all the images
-  var [imgSrc, setImgSrc] = useState(null);
-  var [imgSrc2, setImgSrc2] = useState(null);
-  var [imgSrc3, setImgSrc3] = useState(null);
-  var [imgSrc4, setImgSrc4] = useState(null);
+  var [photos, setPhotos] = useState([null, null, null, null]);
   var [stripUrl, setStripUrl] = useState(null);
+  var [stripMime, setStripMime] = useState('image/png');
   var [selectedBorder, setSelectedBorder] = useState(BORDERS[0]);
-  var [photoCount, setPhotoCount] = useState(0);
   var [stickers, setStickers] = useState([]); // for the emoji stickers and stuff
   var [countdown, setCountdown] = useState(null);
+  var [isCapturing, setIsCapturing] = useState(false);
+  var [captureMode, setCaptureMode] = useState('gif');
 
   var timerRef = useRef(null);
 
   // starts the countdown timer before taking photo
   function startCapture() {
-    if (imgSrc4 != null) return;
+    if (photos[3] != null) return;
     if (countdown != null) return;
+    if (isCapturing) return;
 
     var count = 3;
     setCountdown(count);
@@ -48,39 +51,72 @@ function App() {
     }, 1000);
   }
 
+  function captureBurst() {
+    return new Promise(function (resolve) {
+      if (webcamRef.current == null) return resolve([]);
+
+      var frames = [];
+      var frameDelay = Math.round(1000 / CAPTURE_FPS);
+      var start = Date.now();
+
+      function grabFrame() {
+        var shot = webcamRef.current.getScreenshot();
+        if (shot) frames.push(shot);
+
+        if (Date.now() - start >= CAPTURE_DURATION_MS) {
+          clearInterval(timer);
+          resolve(frames);
+        }
+      }
+
+      var timer = setInterval(grabFrame, frameDelay);
+      grabFrame();
+    });
+  }
+
   // actually takes the photo from webcam
-  function doTakePhoto() {
+  async function doTakePhoto() {
     if (webcamRef.current == null) return;
 
-    var screenshot = webcamRef.current.getScreenshot();
-    if (screenshot == null || screenshot == '') return;
+    if (captureMode == 'image') {
+      var screenshot = webcamRef.current.getScreenshot();
+      if (screenshot == null || screenshot == '') return;
 
-    // set the image to the next available slot
-    if (imgSrc == null) {
-      setImgSrc(screenshot);
-      setPhotoCount(1);
-    } else if (imgSrc2 == null) {
-      setImgSrc2(screenshot);
-      setPhotoCount(2);
-    } else if (imgSrc3 == null) {
-      setImgSrc3(screenshot);
-      setPhotoCount(3);
-    } else if (imgSrc4 == null) {
-      setImgSrc4(screenshot);
-      setPhotoCount(4);
+      setPhotos(function (prev) {
+        var next = prev.slice();
+        var idx = next.findIndex(function (p) { return p == null; });
+        if (idx == -1) return prev;
+        next[idx] = screenshot;
+        return next;
+      });
+      return;
     }
+
+    setIsCapturing(true);
+    var frames = await captureBurst();
+    setIsCapturing(false);
+    if (frames.length == 0) return;
+
+    var still = frames[frames.length - 1];
+    var nextPhoto = { still: still, frames: frames };
+
+    setPhotos(function (prev) {
+      var next = prev.slice();
+      var idx = next.findIndex(function (p) { return p == null; });
+      if (idx == -1) return prev;
+      next[idx] = nextPhoto;
+      return next;
+    });
   }
 
   // clears everything and starts over
   function resetAll() {
-    setImgSrc(null);
-    setImgSrc2(null);
-    setImgSrc3(null);
-    setImgSrc4(null);
-    setPhotoCount(0);
+    setPhotos([null, null, null, null]);
     setStripUrl(null);
+    setStripMime('image/png');
     setStickers([]);
     setCountdown(null);
+    setIsCapturing(false);
     if (timerRef.current != null) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -97,18 +133,24 @@ function App() {
     }
   }
 
-  var showResult = imgSrc4 != null;
+  var showResult = photos[3] != null;
+  var photoCount = 0;
+  for (var i = 0; i < photos.length; i++) {
+    if (photos[i] != null) photoCount++;
+  }
 
   return (
     <div className='flex flex-col items-center justify-center min-h-screen w-full bg-neutral-50'>
       {showResult ? (
         <ResultView
-          photos={[imgSrc, imgSrc2, imgSrc3, imgSrc4]}
+          photos={photos}
           selectedBorder={selectedBorder}
           BORDERS={BORDERS}
           switchBorder={changeBorder}
           stripUrl={stripUrl}
           setStripUrl={setStripUrl}
+          stripMime={stripMime}
+          setStripMime={setStripMime}
           clearPhoto={resetAll}
           stickers={stickers}
           setStickers={setStickers}
@@ -119,6 +161,9 @@ function App() {
           capture={startCapture}
           photoCount={photoCount}
           countdown={countdown}
+          isCapturing={isCapturing}
+          captureMode={captureMode}
+          setCaptureMode={setCaptureMode}
         />
       )}
     </div>

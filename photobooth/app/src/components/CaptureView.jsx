@@ -1,14 +1,18 @@
 import Webcam from 'react-webcam'
 
 // main capture screen
-export default function CaptureView({ webcamRef, capture, photoCount, countdown }) {
+export default function CaptureView({ webcamRef, capture, photoCount, countdown, isCapturing, captureMode, setCaptureMode }) {
 
     var buttonText = "Capture Photo " + photoCount + "/4";
     if (countdown != null) {
-        buttonText = "Taking the Photo!";
+        buttonText = "Get Ready!";
+    }
+    if (isCapturing) {
+        buttonText = "Capturing GIF...";
     }
 
-    var isDisabled = countdown != null;
+    var isDisabled = countdown != null || isCapturing;
+    var lockMode = photoCount > 0 || isDisabled;
 
     return (
         <div className="flex flex-col items-center gap-8">
@@ -29,6 +33,30 @@ export default function CaptureView({ webcamRef, capture, photoCount, countdown 
                     {countdown}
                 </div>
             )}
+            {isCapturing && countdown == null && (
+                <div className="text-3xl font-black text-neutral-900 uppercase tracking-wide">
+                    Capturing...
+                </div>
+            )}
+
+            <div className="flex items-center gap-3">
+                <button
+                    type="button"
+                    disabled={lockMode}
+                    onClick={() => setCaptureMode('gif')}
+                    className={"px-5 py-2 rounded-full text-sm font-black uppercase tracking-wide border-2 transition-all " + (captureMode == 'gif' ? "bg-black text-white border-black" : "bg-white text-neutral-700 border-neutral-300 hover:border-neutral-500") + (lockMode ? " opacity-50 cursor-not-allowed" : "")}
+                >
+                    GIF Strip
+                </button>
+                <button
+                    type="button"
+                    disabled={lockMode}
+                    onClick={() => setCaptureMode('image')}
+                    className={"px-5 py-2 rounded-full text-sm font-black uppercase tracking-wide border-2 transition-all " + (captureMode == 'image' ? "bg-black text-white border-black" : "bg-white text-neutral-700 border-neutral-300 hover:border-neutral-500") + (lockMode ? " opacity-50 cursor-not-allowed" : "")}
+                >
+                    Image Strip
+                </button>
+            </div>
 
             <button
                 onClick={capture}
